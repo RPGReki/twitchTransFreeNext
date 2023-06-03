@@ -5,7 +5,7 @@ from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
 from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re
 import database_controller as db # ja:既訳語データベース   en:Translation Database
 
 version = '2.5.1'
@@ -148,6 +148,10 @@ async def non_twitch_emotes(channel:str):
         conn.request("GET", path) # Get non-Twitch emotes
         resp = conn.getresponse() # Get API response
         for i in json.loads(resp.read()):
+            if re.match(r"[0-9][psmz]", i['code']):
+                continue
+            if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo)", i['code']):
+                continue
             emotes_list.append(i['code'])
     return emotes_list
 
@@ -169,7 +173,7 @@ class Bot(commands.Bot):
         'Called once when the bot goes online.'
         print(f"{self.nick} is online!")
         await channel.send(f"/color {config.Trans_TextColor}")
-        await channel.send(f"/me has landed!")
+        await channel.send(f"/me hopped into chat!")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -277,7 +281,7 @@ class Bot(commands.Bot):
 
         # 言語検出 -----------------------
         if config.Debug: print(f'--- Detect Language ---')
-        lang_detect = ''
+        lang_detect = 'un'
 
         # use google_trans_new ---
         if not config.GAS_URL or config.Translator == 'deepl':
@@ -322,7 +326,31 @@ class Bot(commands.Bot):
         # 音声合成（入力文） --------------
         # if len(in_text) > int(config.TooLong_Cut):
         #     in_text = in_text[0:int(config.TooLong_Cut)]
-        if config.TTS_In: tts.put(in_text, lang_detect)
+        if config.TTS_In:
+            tts_text = in_text
+            if lang_detect == "en" or lang_detect == "un":
+                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 dots', tts_text)
+                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 bamboo', tts_text)
+                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 characters', tts_text)
+                tts_text = re.sub(r'\b1[zZ]\b', 'east', tts_text)
+                tts_text = re.sub(r'\b2[zZ]\b', 'south', tts_text)
+                tts_text = re.sub(r'\b3[zZ]\b', 'west', tts_text)
+                tts_text = re.sub(r'\b4[zZ]\b', 'north', tts_text)
+                tts_text = re.sub(r'\b5[zZ]\b', 'white', tts_text)
+                tts_text = re.sub(r'\b6[zZ]\b', 'green', tts_text)
+                tts_text = re.sub(r'\b7[zZ]\b', 'red', tts_text)
+            if lang_detect == "de":
+                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 Kreise', tts_text)
+                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 Bambus', tts_text)
+                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 Schriftzeichen', tts_text)
+                tts_text = re.sub(r'\b1[zZ]\b', 'Ost', tts_text)
+                tts_text = re.sub(r'\b2[zZ]\b', 'Süd', tts_text)
+                tts_text = re.sub(r'\b3[zZ]\b', 'West', tts_text)
+                tts_text = re.sub(r'\b4[zZ]\b', 'Nord', tts_text)
+                tts_text = re.sub(r'\b5[zZ]\b', 'Weiß', tts_text)
+                tts_text = re.sub(r'\b6[zZ]\b', 'Grün', tts_text)
+                tts_text = re.sub(r'\b7[zZ]\b', 'Rot', tts_text)
+            tts.put(tts_text, lang_detect)
 
         # 検出言語と翻訳先言語が同じだったら無視！
         if lang_detect == lang_dest:
@@ -349,6 +377,11 @@ class Bot(commands.Bot):
                             await asyncio.gather(asyncio.to_thread(deepl.translate, source_language= deepl_lang_dict[lang_detect], target_language=deepl_lang_dict[lang_dest], text=in_text))
                             )[0]
                         if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[lang_detect]} > {deepl_lang_dict[lang_dest]})')
+                    elif lang_detect == "un" and lang_dest in deepl_lang_dict.keys():
+                        translatedText = (
+                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language= deepl_lang_dict["en"], target_language=deepl_lang_dict[lang_dest], text=in_text))
+                            )[0]
+                        if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[en]} > {deepl_lang_dict[lang_dest]})')
                     else:
                         if not config.GAS_URL:
                             try:
@@ -387,16 +420,25 @@ class Bot(commands.Bot):
                 print(f'ERROR: config TRANSLATOR is set the wrong value with [{config.Translator}]')
                 return
 
+            if translatedText == "" or translatedText == in_text:
+                if config.Debug: print('[Translation faulty, retrying with Google Translate]')
+                try:
+                    translatedText = await translator.translate(in_text, lang_dest)
+                    if config.Debug: print('[Google Tlanslate (google_trans_new)]')
+                except Exception as e:
+                    if config.Debug: print(e)
+
             # en:Save the translation to database   ja:翻訳をデータベースに保存する
             await db.save(in_text,translatedText,lang_dest)
 
         # チャットへの投稿 ----------------
         # 投稿内容整形 & 投稿
         out_text = translatedText
-        if config.Show_ByName:
-            out_text = '{} [by {}]'.format(out_text, user)
-        if config.Show_ByLang:
-            out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
+        if out_text.strip != "":
+            if config.Show_ByName:
+                out_text = '{} [by {}]'.format(out_text, user)
+            if config.Show_ByLang:
+                out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
 
         # コンソールへの表示 --------------
         print(out_text)
@@ -409,7 +451,31 @@ class Bot(commands.Bot):
         # 音声合成（出力文） --------------
         # if len(translatedText) > int(config.TooLong_Cut):
         #     translatedText = translatedText[0:int(config.TooLong_Cut)]
-        if config.TTS_Out: tts.put(translatedText, lang_dest)
+        if config.TTS_Out:
+            tts_text = translatedText
+            if lang_detect == "en":
+                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 dots', tts_text)
+                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 bamboo', tts_text)
+                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 characters', tts_text)
+                tts_text = re.sub(r'\b1[zZ]\b', 'east', tts_text)
+                tts_text = re.sub(r'\b2[zZ]\b', 'south', tts_text)
+                tts_text = re.sub(r'\b3[zZ]\b', 'west', tts_text)
+                tts_text = re.sub(r'\b4[zZ]\b', 'north', tts_text)
+                tts_text = re.sub(r'\b5[zZ]\b', 'white', tts_text)
+                tts_text = re.sub(r'\b6[zZ]\b', 'green', tts_text)
+                tts_text = re.sub(r'\b7[zZ]\b', 'red', tts_text)
+            if lang_detect == "de":
+                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 Kreise', tts_text)
+                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 Bambus', tts_text)
+                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 Schriftzeichen', tts_text)
+                tts_text = re.sub(r'\b1[zZ]\b', 'Ost', tts_text)
+                tts_text = re.sub(r'\b2[zZ]\b', 'Süd', tts_text)
+                tts_text = re.sub(r'\b3[zZ]\b', 'West', tts_text)
+                tts_text = re.sub(r'\b4[zZ]\b', 'Nord', tts_text)
+                tts_text = re.sub(r'\b5[zZ]\b', 'Weiß', tts_text)
+                tts_text = re.sub(r'\b6[zZ]\b', 'Grün', tts_text)
+                tts_text = re.sub(r'\b7[zZ]\b', 'Rot', tts_text)
+            tts.put(tts_text, lang_dest)
 
 
     ##############################
