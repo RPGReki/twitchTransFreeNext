@@ -5,7 +5,7 @@ from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
 from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re
 import database_controller as db # ja:既訳語データベース   en:Translation Database
 
 version = '2.5.1'
@@ -148,6 +148,10 @@ async def non_twitch_emotes(channel:str):
         conn.request("GET", path) # Get non-Twitch emotes
         resp = conn.getresponse() # Get API response
         for i in json.loads(resp.read()):
+            if re.match(r"[0-9][psmz]", i['code']):
+                continue
+            if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo)", i['code']):
+                continue
             emotes_list.append(i['code'])
     return emotes_list
 
@@ -160,7 +164,7 @@ class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
             token               = config.Trans_OAUTH,
-            prefix              = "!",
+            prefix              = "?",
             initial_channels    = [config.Twitch_Channel]
         )
 
@@ -169,7 +173,7 @@ class Bot(commands.Bot):
         'Called once when the bot goes online.'
         print(f"{self.nick} is online!")
         await channel.send(f"/color {config.Trans_TextColor}")
-        await channel.send(f"/me has landed!")
+        await channel.send(f"/me hopped into chat!")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -277,7 +281,7 @@ class Bot(commands.Bot):
 
         # 言語検出 -----------------------
         if config.Debug: print(f'--- Detect Language ---')
-        lang_detect = ''
+        lang_detect = 'un'
 
         # use google_trans_new ---
         if not config.GAS_URL or config.Translator == 'deepl':
@@ -322,7 +326,18 @@ class Bot(commands.Bot):
         # 音声合成（入力文） --------------
         # if len(in_text) > int(config.TooLong_Cut):
         #     in_text = in_text[0:int(config.TooLong_Cut)]
-        if config.TTS_In: tts.put(in_text, lang_detect)
+        if config.TTS_In:
+            tts_text = in_text
+            if lang_detect == "en" or lang_detect == "un":
+                for pair in config.TTS_Substitutions['en']:
+                    if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                    tts_text = re.sub(pair[0], pair[1], tts_text)
+            else:
+                if lang_detect in config.TTS_Substitutions: 
+                    for pair in config.TTS_Substitutions[lang_detect]:
+                        if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                        tts_text = re.sub(pair[0], pair[1], tts_text)
+            tts.put(tts_text, lang_detect)
 
         # 検出言語と翻訳先言語が同じだったら無視！
         if lang_detect == lang_dest:
@@ -333,7 +348,8 @@ class Bot(commands.Bot):
         if config.Debug: print(f'--- Translation ---')
         translatedText = ''
 
-        # en:Use database to reduce deepl limit     ja:データベースの活用でDeepLの字数制限を軽減
+        # en:Use database to reduce deepl limit     
+        # ja:データベースの活用でDeepLの字数制限を軽減
         translation_from_database = await db.get(in_text,lang_dest) if in_text is not None else None
 
         if translation_from_database is not None:
@@ -346,9 +362,14 @@ class Bot(commands.Bot):
                 try:
                     if lang_detect in deepl_lang_dict.keys() and lang_dest in deepl_lang_dict.keys():
                         translatedText = (
-                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language= deepl_lang_dict[lang_detect], target_language=deepl_lang_dict[lang_dest], text=in_text))
+                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language=deepl_lang_dict[lang_detect], target_language=deepl_lang_dict[lang_dest], text=in_text))
                             )[0]
                         if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[lang_detect]} > {deepl_lang_dict[lang_dest]})')
+                    elif lang_detect == "un" and config.lang_Fallback in deepl_lang_dict.keys() and lang_dest in deepl_lang_dict.keys():
+                        translatedText = (
+                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language=deepl_lang_dict[config.lang_Fallback], target_language=deepl_lang_dict[lang_dest], text=in_text))
+                            )[0]
+                        if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[config.lang_Fallback]} > {deepl_lang_dict[lang_dest]})')
                     else:
                         if not config.GAS_URL:
                             try:
@@ -387,16 +408,25 @@ class Bot(commands.Bot):
                 print(f'ERROR: config TRANSLATOR is set the wrong value with [{config.Translator}]')
                 return
 
+            if translatedText == "" or translatedText == in_text:
+                if config.Debug: print('[Translation faulty, retrying with Google Translate]')
+                try:
+                    translatedText = await translator.translate(in_text, lang_dest)
+                    if config.Debug: print('[Google Tlanslate (google_trans_new)]')
+                except Exception as e:
+                    if config.Debug: print(e)
+
             # en:Save the translation to database   ja:翻訳をデータベースに保存する
-            await db.save(in_text,translatedText,lang_dest)
+            await db.save(in_text, translatedText, lang_dest)
 
         # チャットへの投稿 ----------------
         # 投稿内容整形 & 投稿
         out_text = translatedText
-        if config.Show_ByName:
-            out_text = '{} [by {}]'.format(out_text, user)
-        if config.Show_ByLang:
-            out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
+        if out_text.strip != "":
+            if config.Show_ByName:
+                out_text = '{} [by {}]'.format(out_text, user)
+            if config.Show_ByLang:
+                out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
 
         # コンソールへの表示 --------------
         print(out_text)
@@ -409,7 +439,13 @@ class Bot(commands.Bot):
         # 音声合成（出力文） --------------
         # if len(translatedText) > int(config.TooLong_Cut):
         #     translatedText = translatedText[0:int(config.TooLong_Cut)]
-        if config.TTS_Out: tts.put(translatedText, lang_dest)
+        if config.TTS_Out:
+            tts_text = translatedText
+            if lang_detect in config.TTS_Substitutions:
+                for pair in config.TTS_Substitutions[lang_detect]:
+                    if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                    tts_text = re.sub(pair[0], pair[1], tts_text)
+            tts.put(tts_text, lang_dest)
 
 
     ##############################
@@ -417,11 +453,6 @@ class Bot(commands.Bot):
     @commands.command(name='ver')
     async def ver(self, ctx):
         await ctx.send('this is tTFN. ver: ' + version)
-
-    @commands.command(name='sound')
-    async def sound(self, ctx):
-        sound_name = ctx.message.content.strip().split(" ")[1]
-        sound.put(sound_name)
 
     @commands.command(name='timer')
     async def timer(self, ctx):
