@@ -3,7 +3,7 @@
 
 from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
-from twitchio.ext import commands
+from twitchio.ext import commands, eventsub
 from emoji import distinct_emoji_list
 import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re
 import database_controller as db # ja:既訳語データベース   en:Translation Database
@@ -164,7 +164,7 @@ class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
             token               = config.Trans_OAUTH,
-            prefix              = "?",
+            prefix              = config.Bot_Prefix,
             initial_channels    = [config.Twitch_Channel]
         )
 
@@ -423,10 +423,10 @@ class Bot(commands.Bot):
         # 投稿内容整形 & 投稿
         out_text = translatedText
         if out_text.strip != "":
-            if config.Show_ByName:
-                out_text = '{} [by {}]'.format(out_text, user)
             if config.Show_ByLang:
                 out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
+            if config.Show_ByName:
+                out_text = '{} [by {}]'.format(out_text, user)
 
         # コンソールへの表示 --------------
         print(out_text)

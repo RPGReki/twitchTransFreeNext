@@ -5,6 +5,7 @@ load_dotenv()
 
 Twitch_Channel          = 'RPGReki'
 Trans_Username          = 'AiteUsagi'
+Bot_Prefix              = '?'
 Trans_OAUTH             = os.environ['TWITTER_OAUTH']
 
 Trans_TextColor         = 'Red'
