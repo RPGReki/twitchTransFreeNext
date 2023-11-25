@@ -3,9 +3,9 @@
 
 from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
-from twitchio.ext import commands, eventsub
+from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, d20, uwuify
 import database_controller as db # ja:既訳語データベース   en:Translation Database
 
 version = '2.5.1'
@@ -165,7 +165,7 @@ class Bot(commands.Bot):
         super().__init__(
             token               = config.Trans_OAUTH,
             prefix              = config.Bot_Prefix,
-            initial_channels    = [config.Twitch_Channel]
+            initial_channels    = config.Twitch_Channels
         )
 
     # 起動時 ####################
@@ -188,13 +188,13 @@ class Bot(commands.Bot):
         if not msg.echo:
             await self.handle_commands(msg)
 
-        if msg.content.startswith('!'):
+        if msg.content.startswith('!') or msg.content.startswith(config.Bot_Prefix):
             return
 
         # 変数入れ替え ------------------------
         message = msg.content
         user    = msg.author.name.lower()
-        non_twitch_emote_list = await non_twitch_emotes(config.Twitch_Channel)
+        non_twitch_emote_list = await non_twitch_emotes(config.Twitch_Channel) or await non_twitch_emotes(config.Twitch_Channel) or []
 
         # 無視ユーザリストチェック -------------
         if config.Debug: print('USER:{}'.format(user))
@@ -454,6 +454,10 @@ class Bot(commands.Bot):
     async def ver(self, ctx):
         await ctx.send('this is tTFN. ver: ' + version)
 
+    @commands.command(name='kokushi')
+    async def kokushi(self, ctx):
+        sound.put('kokushi')
+
     @commands.command(name='timer')
     async def timer(self, ctx):
         timer_min = 0
@@ -484,6 +488,24 @@ class Bot(commands.Bot):
         await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) start! ####')
         await asyncio.sleep(timer_min*60)
         await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) end! ####')
+
+    @commands.command(name='roll')
+    async def roll(self, ctx):
+        try:
+            d = ctx.message.content.strip().split(" ")
+            await ctx.send(str(d20.roll(" ".join(d[1:]))))
+        except Exception as e:
+            await ctx.send('roll error: !roll [formula]')
+        return 0
+    
+    @commands.command(name='uwuify')
+    async def uwuify(self, ctx):
+        try:
+            d = ctx.message.content.strip().split(" ")
+            await ctx.send(uwuify.uwu(" ".join(d[1:])))
+        except Exception as e:
+            await ctx.send('uwuify error: !uwuify [phrase]')
+        return 0
 
 # メイン処理 ###########################
 def main():

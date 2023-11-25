@@ -3,15 +3,16 @@ import os
 
 load_dotenv()
 
-Twitch_Channel          = 'RPGReki'
-Trans_Username          = 'AiteUsagi'
-Bot_Prefix              = '?'
+Twitch_Channels         = ['rpgreki']
+Twitch_Channel          = 'rpgreki'
+Trans_Username          = 'aiteusagi'
+Bot_Prefix              = '!'
 Trans_OAUTH             = os.environ['TWITTER_OAUTH']
 
 Trans_TextColor         = 'Red'
 
 lang_TransToHome        = 'en'
-lang_HomeToOther        = 'en'
+lang_HomeToOther        = 'de'
 lang_Fallback           = 'en'
 
 
@@ -31,6 +32,9 @@ TTS_Kind                = "gTTS" # You can choice "CeVIO" if you want to use CeV
 TTS_TextMaxLength       = 500
 # CeVIO_Cast            = "さとうささら" # When you are using CeVIO, you must set voice cast name.
 
+
+# Substitutions will be made before emote detection
+
 TTS_Substitutions       = {
     "en": [
         ['\\b([0-9])[pP]\\b', '\\1 dots'],
@@ -44,7 +48,9 @@ TTS_Substitutions       = {
         ['\\b6[zZ]\\b', 'green'],
         ['\\b7[zZ]\\b', 'red'],
         ['\\brpgrek[A-Z][a-zA-Z0-9]*\\b', ''],
-        ['\\Da\\b', 'The']
+        ['\\bDa\\b', 'The'],
+        ['\\b!songrequest\\b', 'exclamation mark songrequest'],
+        ['<se.[0-9]*>', '']
     ]
 }
 
@@ -54,5 +60,6 @@ ReadOnlyTheseLang       = ['en']
 Translator              = 'deepl' #'google'
 GAS_URL                 = ''
 GoogleTranslate_suffix  = 'de'
+GoogleTTS_suffix        = 'de'
 
 Debug                   = True

@@ -77,7 +77,7 @@ class TTS:
     # までを行う音声合成の実行関数。
     def gTTS_play(self, text, tl):
         try:
-            tts = gTTS(text, lang=tl)
+            tts = gTTS(text, lang=tl, tld=self.config.GoogleTTS_suffix)
             tts_file = './tmp/cnt_{}.mp3'.format(datetime.now().microsecond)
             if self.config.Debug: print('gTTS file: {}'.format(tts_file))
             tts.save(tts_file)
