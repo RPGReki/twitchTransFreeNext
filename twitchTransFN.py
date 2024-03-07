@@ -5,7 +5,7 @@ from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
 from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, d20, uwuify
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, d20, uwuify, random, queue
 import database_controller as db # ja:既訳語データベース   en:Translation Database
 
 version = '2.5.1'
@@ -56,6 +56,8 @@ TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg",
                 "sv", "tg", "ta", "te", "th", "tr", "uk", "ur", "uz", "vi", "cy", "xh", "yi", "yo", "zu"]
 
 deepl_lang_dict = {'de':'DE', 'en':'EN', 'fr':'FR', 'es':'ES', 'pt':'PT', 'it':'IT', 'nl':'NL', 'pl':'PL', 'ru':'RU', 'ja':'JA', 'zh-CN':'ZH'}
+
+ptts_text = ""
 
 ##########################################
 # load config text #######################
@@ -147,12 +149,24 @@ async def non_twitch_emotes(channel:str):
     for path in [f"/v1/channel/{channel}/emotes/bttv.7tv.ffz","/v1/global/emotes/bttv.7tv.ffz"]:
         conn.request("GET", path) # Get non-Twitch emotes
         resp = conn.getresponse() # Get API response
-        for i in json.loads(resp.read()):
-            if re.match(r"[0-9][psmz]", i['code']):
-                continue
-            if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo)", i['code']):
-                continue
-            emotes_list.append(i['code'])
+        try:
+            for i in json.loads(resp.read()):
+                if re.match(r"[0-9][psmz]", i['code']):
+                    continue
+                if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo|toitoi|mleague)", i['code']):
+                    continue
+                if re.match(r"(lychee|sleep|sleepy|MSQ|mentor|PonCat|Yo|doomed|confused|food|lurk)", i['code']):
+                    continue
+                if re.match(r"(raised|blind|Bio|Protect|Stoneskin|ShroudOfSaints|Bane|LuminiferousAether|FeyWind|FeyCaress|Contagion|Kardia|ClericStance)", i['code']):
+                    continue
+                if re.match(r"(astrologian|dancer|ninja|paladin|samurai|summoner|warrior|whitemage|blackmage|darkknight|gunbreaker|machinist|reaper|bluemage|dragoon|redmage|scholar|sage)", i['code']):
+                    continue
+                if re.match(r"(GLA|PLD|MRD|WAR|DRK|GNB|CNJ|WHM|SCH|AST|SAG|PGL|MNK|SAM|LNC|DRG|REA|ROG|NIN|ARC|BRD|MCH|DNC|THM|BLM|ACN|SMN|RDM|BLU|CRP|BSM|ARM|GSM|LTW|WVR|ALC|CUL|MIN|BTN|FSH)", i['code']):
+                    continue
+                
+                emotes_list.append(i['code'])
+        except Exception:
+            pass
     return emotes_list
 
 ##########################################
@@ -160,6 +174,9 @@ async def non_twitch_emotes(channel:str):
 ##########################################
 
 class Bot(commands.Bot):
+    pi_tts_text = ""
+    po_tts_text = ""
+    p_out_text = ""
 
     def __init__(self):
         super().__init__(
@@ -172,8 +189,7 @@ class Bot(commands.Bot):
     async def event_channel_joined(self, channel):
         'Called once when the bot goes online.'
         print(f"{self.nick} is online!")
-        await channel.send(f"/color {config.Trans_TextColor}")
-        await channel.send(f"/me hopped into chat!")
+        await channel.send(f"President Bun Bun on duty!")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -337,7 +353,12 @@ class Bot(commands.Bot):
                     for pair in config.TTS_Substitutions[lang_detect]:
                         if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
                         tts_text = re.sub(pair[0], pair[1], tts_text)
-            tts.put(tts_text, lang_detect)
+            if self.pi_tts_text != tts_text:
+                print(f"TTS({lang_detect}): {tts_text}")
+                tts.put(tts_text, lang_detect)
+            else:
+                print("Duplicate TTS detected. Ignoring…")
+            self.pi_tts_text = tts_text
 
         # 検出言語と翻訳先言語が同じだったら無視！
         if lang_detect == lang_dest:
@@ -422,30 +443,53 @@ class Bot(commands.Bot):
         # チャットへの投稿 ----------------
         # 投稿内容整形 & 投稿
         out_text = translatedText
-        if out_text.strip != "":
-            if config.Show_ByLang:
-                out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
-            if config.Show_ByName:
-                out_text = '{} [by {}]'.format(out_text, user)
+        if out_text.casefold().strip() == in_text.casefold().strip() or out_text.casefold().strip() == self.p_out_text.casefold().strip():
+            out_text = ""
+            print("Skip Translation")
+        
+        else:
+            if out_text.strip():
+                if config.Show_ByLang:
+                    out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
+                if config.Show_ByName:
+                    out_text = '{} [by {}]'.format(out_text, user)
 
-        # コンソールへの表示 --------------
-        print(out_text)
+            # コンソールへの表示 --------------
+            print(out_text)
 
-        # en:If message is only emoji; then do not translate, and do not send a message
-        # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
-        if in_text is not None:
-            await msg.channel.send("/me " + out_text)
+            # en:If message is only emoji; then do not translate, and do not send a message
+            # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
+            if in_text is not None:
+                await msg.channel.send("/me " + out_text)
+                self.p_out_text = out_text
 
-        # 音声合成（出力文） --------------
-        # if len(translatedText) > int(config.TooLong_Cut):
-        #     translatedText = translatedText[0:int(config.TooLong_Cut)]
-        if config.TTS_Out:
-            tts_text = translatedText
-            if lang_detect in config.TTS_Substitutions:
-                for pair in config.TTS_Substitutions[lang_detect]:
+            # 音声合成（出力文） --------------
+            # if len(translatedText) > int(config.TooLong_Cut):
+            #     translatedText = translatedText[0:int(config.TooLong_Cut)]
+            if out_text.casefold().strip() == in_text.casefold().strip():
+                tts_text = in_text
+                for pair in config.TTS_Substitutions[config.lang_Fallback]:
                     if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
                     tts_text = re.sub(pair[0], pair[1], tts_text)
-            tts.put(tts_text, lang_dest)
+                
+                print(f"TTS ({config.lang_Fallback}): {tts_text}")
+                tts.put(tts_text, config.lang_Fallback)
+            
+            if config.TTS_Out and lang_dest in config.ReadOnlyTheseLang and out_text:
+                tts_text = translatedText
+                
+                if lang_dest in config.TTS_Substitutions:
+                    for pair in config.TTS_Substitutions[lang_dest]:
+                        if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                        tts_text = re.sub(pair[0], pair[1], tts_text)
+
+                if self.po_tts_text != tts_text:
+                    print(f"TTS({lang_dest}): {tts_text}")
+                    tts.put(tts_text, lang_dest)
+                else:
+                    print("Duplicate TTS detected. Ignoring…")
+                
+                self.po_tts_text = tts_text
 
 
     ##############################
@@ -505,6 +549,23 @@ class Bot(commands.Bot):
             await ctx.send(uwuify.uwu(" ".join(d[1:])))
         except Exception as e:
             await ctx.send('uwuify error: !uwuify [phrase]')
+        return 0
+
+    @commands.command(name='quote')
+    async def quote(self, ctx):
+        try:    
+            d = ctx.message.content.strip().split(" ")
+            n = 0
+            if len(d) == 1:
+                n = random.randrange(0, len(config.Quotes))
+            else:
+                n = int(d[1])
+            if n >= len(config.Quotes) or n < 0:
+                await ctx.send(f"quote error: no such quote")
+            else:
+                await ctx.send(f"Quote #{n}: {config.Quotes[n]}")
+        except Exception as e:
+            await ctx.send('quote error: !quote [number]' + e)
         return 0
 
 # メイン処理 ###########################
