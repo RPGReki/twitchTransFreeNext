@@ -3,14 +3,13 @@ import os
 
 load_dotenv()
 
-Twitch_Channels         = ['rpgreki']
-Twitch_Channel          = 'rpgreki'
+Twitch_Channel          = 'RPGReki'
 Trans_Username          = 'flufflekeeper'
 Bot_Prefix              = '!'
 Trans_OAUTH             = os.environ['TWITTER_OAUTH']
 
 Trans_TextColor         = 'Red'
-
+Trans_Target_Channel    = 'flufflekeeper'
 lang_TransToHome        = 'en'
 lang_HomeToOther        = 'de'
 lang_Fallback           = 'en'
@@ -27,7 +26,7 @@ Delete_Words            = []
 # Any emvironment, set it to `True`, then text will be read by TTS voice!
 # TTS_In:User Input Text, TTS_Out:Bot Output Text
 TTS_In                  = True
-TTS_Out                 = True
+TTS_Out                 = False
 TTS_Kind                = "gTTS" # You can choice "CeVIO" if you want to use CeVIO as TTS.
 TTS_TextMaxLength       = 500
 # CeVIO_Cast            = "さとうささら" # When you are using CeVIO, you must set voice cast name.
@@ -72,7 +71,8 @@ TTS_Substitutions       = {
         ['\\bTHM\\b','pugilist'], ['\\bBLM\\b','black mage'],
         ['\\bACN\\b','arcanist'], ['\\bSMN\\b','summoner'],
         ['\\bRDM\\b','red mage'],
-        ['\\bBLU\\b','blue mage']
+        ['\\bBLU\\b','blue mage'],
+        ['Deenial', 'denial']
     ],
     "de": [
        ['https://\\S*', ''],
@@ -92,7 +92,7 @@ TTS_Substitutions       = {
     ]
 }
 
-ReadOnlyTheseLang       = ["en", "ja"]
+ReadOnlyTheseLang       = []
 
 # Select the translate engine ('deepl' or 'google')
 Translator              = 'deepl' #'google'

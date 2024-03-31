@@ -182,14 +182,15 @@ class Bot(commands.Bot):
         super().__init__(
             token               = config.Trans_OAUTH,
             prefix              = config.Bot_Prefix,
-            initial_channels    = config.Twitch_Channels
+            initial_channels    = [config.Twitch_Channel, config.Trans_Target_Channel]
         )
 
     # 起動時 ####################
     async def event_channel_joined(self, channel):
         'Called once when the bot goes online.'
-        print(f"{self.nick} is online!")
-        await channel.send(f"President Bun Bun on duty!")
+        print(f"{self.nick} joined {config.Twitch_Channel}!")
+        self.output = self.get_channel(config.Trans_Username)
+        await channel.send(f"Translating messages from this channel to https://twitch.tv/{config.Trans_Username}/chat …")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -293,7 +294,11 @@ class Bot(commands.Bot):
 
         # 入力 --------------------------
         in_text = message
-        print(in_text)
+        print(f"{user}: {in_text}")
+        if config.Trans_Target_Channel != config.Twitch_Channel:
+            if not self.output:
+                self.output = self.get_channel(config.Trans_Target_Channel)
+            await self.output.send('{}: {}'.format(user, in_text))
 
         # 言語検出 -----------------------
         if config.Debug: print(f'--- Detect Language ---')
@@ -444,6 +449,7 @@ class Bot(commands.Bot):
         # 投稿内容整形 & 投稿
         out_text = translatedText
         if out_text.casefold().strip() == in_text.casefold().strip() or out_text.casefold().strip() == self.p_out_text.casefold().strip():
+            if config.Debug: print(out_text)
             out_text = ""
             print("Skip Translation")
         
@@ -452,7 +458,7 @@ class Bot(commands.Bot):
                 if config.Show_ByLang:
                     out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
                 if config.Show_ByName:
-                    out_text = '{} [by {}]'.format(out_text, user)
+                    out_text = '{}: {}'.format(user, out_text)
 
             # コンソールへの表示 --------------
             print(out_text)
@@ -460,7 +466,12 @@ class Bot(commands.Bot):
             # en:If message is only emoji; then do not translate, and do not send a message
             # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
             if in_text is not None:
-                await msg.channel.send("/me " + out_text)
+                if config.Trans_Target_Channel != config.Twitch_Channel:
+                    if not self.output:
+                        self.output = self.get_channel(config.Trans_Target_Channel)
+                    await self.output.send("/me " + out_text)
+                else:
+                    await msg.channel.send("/me " + out_text)
                 self.p_out_text = out_text
 
             # 音声合成（出力文） --------------
@@ -491,82 +502,6 @@ class Bot(commands.Bot):
                 
                 self.po_tts_text = tts_text
 
-
-    ##############################
-    # コマンド ####################
-    @commands.command(name='ver')
-    async def ver(self, ctx):
-        await ctx.send('this is tTFN. ver: ' + version)
-
-    @commands.command(name='kokushi')
-    async def kokushi(self, ctx):
-        sound.put('kokushi')
-
-    @commands.command(name='timer')
-    async def timer(self, ctx):
-        timer_min = 0
-        timer_name = ''
-
-        d = ctx.message.content.strip().split(" ")
-        if len(d) == 2:
-            try:
-                timer_min = int(d[1])
-            except Exception as e:
-                    print('timer error: !timer [min] [name]')
-                    if config.Debug: print(e.args)
-                    return 0
-
-        elif len(d) == 3:
-            try:
-                timer_min = int(d[1])
-                timer_name = d[2]
-            except Exception as e:
-                    print('timer error: !timer [min] [name]')
-                    if config.Debug: print(e.args)
-                    return 0
-
-        else:
-            print(f'command error [{ctx.content}]')
-            return 0
-
-        await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) start! ####')
-        await asyncio.sleep(timer_min*60)
-        await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) end! ####')
-
-    @commands.command(name='roll')
-    async def roll(self, ctx):
-        try:
-            d = ctx.message.content.strip().split(" ")
-            await ctx.send(str(d20.roll(" ".join(d[1:]))))
-        except Exception as e:
-            await ctx.send('roll error: !roll [formula]')
-        return 0
-    
-    @commands.command(name='uwuify')
-    async def uwuify(self, ctx):
-        try:
-            d = ctx.message.content.strip().split(" ")
-            await ctx.send(uwuify.uwu(" ".join(d[1:])))
-        except Exception as e:
-            await ctx.send('uwuify error: !uwuify [phrase]')
-        return 0
-
-    @commands.command(name='quote')
-    async def quote(self, ctx):
-        try:    
-            d = ctx.message.content.strip().split(" ")
-            n = 0
-            if len(d) == 1:
-                n = random.randrange(0, len(config.Quotes))
-            else:
-                n = int(d[1])
-            if n >= len(config.Quotes) or n < 0:
-                await ctx.send(f"quote error: no such quote")
-            else:
-                await ctx.send(f"Quote #{n}: {config.Quotes[n]}")
-        except Exception as e:
-            await ctx.send('quote error: !quote [number]' + e)
-        return 0
 
 # メイン処理 ###########################
 def main():
