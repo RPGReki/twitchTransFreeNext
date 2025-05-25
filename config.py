@@ -24,10 +24,8 @@ Ignore_Users            = ['WarpWorldBot', 'SonglistBot']
 Ignore_Line             = ['-> The stream', '-> Current Stream', 'Currently playing', '(╯°□°）╯', 'Da bunnies are invading!', 'via reward)', '(auto timer)', 'has now been played', 'chat machine translation']
 Delete_Words            = []
 
-# Any emvironment, set it to `True`, then text will be read by TTS voice!
-# TTS_In:User Input Text, TTS_Out:Bot Output Text
-TTS_In                  = True
-TTS_Out                 = True
+TTS_In                  = False
+TTS_Out                 = False
 TTS_Kind                = "gTTS" # You can choice "CeVIO" if you want to use CeVIO as TTS.
 TTS_TextMaxLength       = 500
 # CeVIO_Cast            = "さとうささら" # When you are using CeVIO, you must set voice cast name.
@@ -41,16 +39,16 @@ TTS_Substitutions       = {
         ['https://\\S*', ''],
         ['(Link: |via |at: |)https://\\S*', ''],
         ['RPGReki', 'RPG Reki'],
-        ['\\b([0-9])p\\b', '\\1 dots'],
-        ['\\b([0-9])s\\b', '\\1 bamboo'],
-        ['\\b([0-9])m\\b', '\\1 characters'],
-        ['\\b1z\\b', 'east'],
-        ['\\b2z\\b', 'south'],
-        ['\\b3z\\b', 'west'],
-        ['\\b4z\\b', 'north'],
-        ['\\b5z\\b', 'white'],
-        ['\\b6z\\b', 'green'],
-        ['\\b7z\\b', 'red'],
+        ['\\b([0-9])[pP]\\b', '\\1 dots'],
+        ['\\b([0-9])[sS]\\b', '\\1 bamboo'],
+        ['\\b([0-9])[mM]\\b', '\\1 characters'],
+        ['\\b1[zZ]\\b', 'east'],
+        ['\\b2[zZ]\\b', 'south'],
+        ['\\b3[zZ]\\b', 'west'],
+        ['\\b4[zZ]\\b', 'north'],
+        ['\\b5[zZ]\\b', 'white'],
+        ['\\b6[zZ]\\b', 'green'],
+        ['\\b7[zZ]\\b', 'red'],
         ['\\brpgrek[A-Z][a-zA-Z0-9]*\\b', ''],
         ['\\bDa\\b', 'The'],
         ['!([0-9a-zA-Z]\S*)', 'exclamation mark \\1.'],
@@ -103,7 +101,3 @@ GoogleTTS_suffix        = 'de'
 
 Debug                   = False
 
-Quotes = [
-    "“Oh mein Gott! It's Limit Cut!!” — RPGReki, October 2023",
-    "“I'm a rather wet bunny… or should I say moist?” — RPGReki, September 2023",
-]

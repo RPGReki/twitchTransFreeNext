@@ -7,5 +7,5 @@ emoji==2.8.0
 python-dotenv==1.0.0
 pywin32;platform_system == 'Windows'
 uwuify
-pyroll20
+r20
 

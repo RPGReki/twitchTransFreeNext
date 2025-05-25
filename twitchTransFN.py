@@ -5,40 +5,10 @@ from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
 from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, uwuify, random, queue
-from pyroll20.pyroll20 import roll
-import database_controller as db # ja:既訳語データベース   en:Translation Database
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, d20, uwuify, random, queue
+import database_controller as db # en:Translation Database
 
-version = '2.5.1'
-'''
-v2.5.1  : - bug fix for TTS(さとうささら) by yuniruyuni
-v2.5.0  : - 実行バイナリをリポジトリに含めず，ActionsでReleaseするように変更（yuniruyuni先生，ちゃらひろ先生による）
-          - 様々なバグ修正（ちゃらひろせんせいによる）
-v2.4.0  : - yuniruyuni先生によるrequirements環境の整理
-          - それに合わせたソースの改変
-          - CeVIOへの対応
-v2.3.0  : google_trans_new 修正，
-v2.2.2  : GoogleAppsScriptを使って翻訳できるようにした
-v2.2.1  : !timerコマンド追加
-v2.2.0  : - 翻訳サーバの選択（ちゃらひろ先生による実装）
-          - emoteを削除する
-          - MacOS版と一本化（pyinstallerでのconfig.py読み込み対策）
-（v2.1.5  : 音声再生速度の変更オプション）
-v2.1.4  : 読み上げ言語指定ができるようにした
-v2.1.3  : 関連モジュールアップデート、バグフィクス
-v2.1.2  : _MEI関連
-v2.1.1  : googletrans -> google_trans_new へ置き換え
-v2.1.0  : config.py の導入
-v2.0.11 : gTTSアップデート＆twitch接続モジュール変更＆色々修正
-v2.0.10 : python コードの文字コードをUTF-8と指定
-v2.0.10 : オプション gTTS を gTTS_In, gTTS_Out に分割
-v2.0.8  : オプション「無視する言語」「Show_ByName」「Show_ByLang」追加`
-v2.0.7  : チャット内の別ルームを指定して，そこに翻訳結果を書く
-v2.0.6  : テキストの色変更
-v2.0.5  : 裏技「翻訳先言語選択機能」実装 
-v2.0.4  : 
-v2.0.3  : いろいろ実装した
-'''
+version = '2.5.1-rpgreki'
 
 #####################################
 # 初期設定 ###########################
@@ -49,7 +19,7 @@ TMP_DIR = f'{os.path.dirname(sys.argv[0])}/tmp/'
 # translate.googleのサフィックスリスト
 URL_SUFFIX_LIST = [re.search('translate.google.(.*)', url.strip()).group(1) for url in constant.DEFAULT_SERVICE_URLS]
 
-TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca", "ceb", "ny", "zh-CN", "zh-TW", "zh-HK", "co",
+TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca", "ceb", "ny", "zh-CN", "zh-TW", "co",
                 "hr", "cs", "da", "nl", "en", "eo", "et", "tl", "fi", "fr", "fy", "gl", "ka", "de", "el", "gu", "ht", "ha",
                 "haw", "iw", "hi", "hmn", "hu", "is", "ig", "id", "ga", "it", "ja", "jw", "kn", "kk", "km", "ko", "ku", "ky",
                 "lo", "la", "lv", "lt", "lb", "mk", "mg", "ms", "ml", "mt", "mi", "mr", "mn", "my", "ne", "no", "ps", "fa",
@@ -183,7 +153,7 @@ class Bot(commands.Bot):
         super().__init__(
             token               = config.Trans_OAUTH,
             prefix              = config.Bot_Prefix,
-            initial_channels    = config.Bot_Channels
+            initial_channels    = [config.Twitch_Channel, config.Trans_Target_Channel]
         )
 
     # 起動時 ####################
@@ -191,7 +161,8 @@ class Bot(commands.Bot):
         'Called once when the bot goes online.'
         print(f"{self.nick} joined {channel.name}!")
         self.output = self.get_channel(config.Trans_Username)
-        #await channel.send(f"Translating messages from this channel to https://twitch.tv/{config.Trans_Username}/chat …")
+        
+        await channel.send(f"Translating messages from this channel to https://twitch.tv/{config.Trans_Username}/chat Übersetze Nachrichten aus diesem Channel in https://twitch.tv/{config.Trans_Username}/chat …")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -208,10 +179,8 @@ class Bot(commands.Bot):
 
         if msg.content.startswith('!') or msg.content.startswith(config.Bot_Prefix):
             return
-        
         if msg.channel.name == config.Trans_Target_Channel:
             return
-
         # 変数入れ替え ------------------------
         message = msg.content
         user    = msg.author.name.lower()
@@ -446,7 +415,6 @@ class Bot(commands.Bot):
                 except Exception as e:
                     if config.Debug: print(e)
 
-            # en:Save the translation to database   ja:翻訳をデータベースに保存する
             if translatedText != in_text: await db.save(in_text, translatedText, lang_dest)
 
         # チャットへの投稿 ----------------
@@ -471,7 +439,8 @@ class Bot(commands.Bot):
             # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
             if in_text is not None:
                 if config.Trans_Target_Channel != config.Twitch_Channel:
-                    if not self.output: self.output = self.get_channel(config.Trans_Target_Channel)
+                    if not self.output:
+                        self.output = self.get_channel(config.Trans_Target_Channel)
                     await self.output.send("/me " + out_text)
                 else:
                     await msg.channel.send("/me " + out_text)
@@ -520,7 +489,6 @@ def main():
         else:
             print(f'Translate using Google Apps Script')
             if config.Debug: print(f'GAS URL: {config.GAS_URL}')
-
 
         if config.Debug: print("making tmp dir...")
         if os.path.exists(TMP_DIR):
