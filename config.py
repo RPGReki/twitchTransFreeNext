@@ -1,24 +1,27 @@
-######################################################
-# PLEASE CHANGE FOLLOWING CONFIGS ####################
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 Twitch_Channel          = 'RPGReki'
+Trans_Username          = 'flufflekeeper'
+Bot_Prefix              = '!'
+Trans_OAUTH             = os.environ['TWITTER_OAUTH']
 
-Trans_Username          = 'CompanionBunny'
-Trans_OAUTH             = ''
-
-#######################################################
-# OPTIONAL CONFIGS ####################################
 Trans_TextColor         = 'Red'
-# Blue, Coral, DodgerBlue, SpringGreen, YellowGreen, Green, OrangeRed, Red, GoldenRod, HotPink, CadetBlue, SeaGreen, Chocolate, BlueViolet, and Firebrick
-
+Trans_Target_Channel    = 'flufflekeeper'
 lang_TransToHome        = 'en'
 lang_HomeToOther        = 'de'
+lang_Fallback           = 'en'
+
+Bot_Channels            = [Twitch_Channel, Trans_Target_Channel] #, 'aile_vtb', 'ngreimond', 'arataclocksworth']
 
 Show_ByName             = True
 Show_ByLang             = True
 
 Ignore_Lang             = []
-Ignore_Users            = []
-Ignore_Line             = ['http']
+Ignore_Users            = ['WarpWorldBot', 'SonglistBot']
+Ignore_Line             = ['-> The stream', '-> Current Stream', 'Currently playing', '(╯°□°）╯', 'Da bunnies are invading!', 'via reward)', '(auto timer)', 'has now been played', 'chat machine translation']
 Delete_Words            = []
 
 # Any emvironment, set it to `True`, then text will be read by TTS voice!
@@ -29,22 +32,78 @@ TTS_Kind                = "gTTS" # You can choice "CeVIO" if you want to use CeV
 TTS_TextMaxLength       = 500
 # CeVIO_Cast            = "さとうささら" # When you are using CeVIO, you must set voice cast name.
 
-# if you make TTS for only few lang, please add langID in the list
-# for example, ['ja'] means Japanese only, ['ko','en'] means Korean and English are TTS!
-ReadOnlyTheseLang       = ['en', '']
+
+# Substitutions will be made before emote detection
+
+TTS_Substitutions       = {
+    "en": [
+        ['<se.[0-9]*>', ''],
+        ['https://\\S*', ''],
+        ['(Link: |via |at: |)https://\\S*', ''],
+        ['RPGReki', 'RPG Reki'],
+        ['\\b([0-9])p\\b', '\\1 dots'],
+        ['\\b([0-9])s\\b', '\\1 bamboo'],
+        ['\\b([0-9])m\\b', '\\1 characters'],
+        ['\\b1z\\b', 'east'],
+        ['\\b2z\\b', 'south'],
+        ['\\b3z\\b', 'west'],
+        ['\\b4z\\b', 'north'],
+        ['\\b5z\\b', 'white'],
+        ['\\b6z\\b', 'green'],
+        ['\\b7z\\b', 'red'],
+        ['\\brpgrek[A-Z][a-zA-Z0-9]*\\b', ''],
+        ['\\bDa\\b', 'The'],
+        ['!([0-9a-zA-Z]\S*)', 'exclamation mark \\1.'],
+        ['\\bGLA\\b','gladiator'], ['\\bPLD\\b','paladin'],
+        ['\\bMRD\\b','marauder'],  ['\\bWAR\\b','warrior'],
+        ['\\bDRK\\b','dark knight'],
+        ['\\bGNB\\b','gun breaker'],
+        ['\\bCNJ\\b','conjurer'],  ['\\bWHM\\b','white mage'],
+        ['\\bSCH\\b','scholar'],
+        ['\\bAST\\b','astrologian'],
+        ['\\bSAG\\b','sage'],
+        ['\\bPGL\\b','pugilist'], ['\\bMNK\\b','monk'],
+        ['\\bSAM\\b','samurai'],
+        ['\\bLNC\\b','lancer'], ['\\bDRG\\b','dragoon'],
+        ['\\bROG\\b','rogue'], ['\\bNIN\\b','ninja'],
+        ['\\bARC\\b','archer'],['\\bBRD\\b','bard'],
+        ['\\bMCH\\b','machinist'],
+        ['\\bDNC\\b','dancer'],
+        ['\\bTHM\\b','pugilist'], ['\\bBLM\\b','black mage'],
+        ['\\bACN\\b','arcanist'], ['\\bSMN\\b','summoner'],
+        ['\\bRDM\\b','red mage'],
+        ['\\bBLU\\b','blue mage'],
+        ['Deenial', 'denial']
+    ],
+    "de": [
+       ['https://\\S*', ''],
+       ['RPGReki', 'RPG Reki'],
+    ],
+    "ja": [
+        ['https://\\S*', ''],
+        ['RPGReki', 'RPG Reki'],
+    ],
+    "un": [
+        ['https://\\S*', ''],
+        ['RPGReki', 'RPG Reki'],
+    ],
+    "vi": [
+        ['https://\\S*', ''],
+        ['RPGReki', 'RPG Reki'],
+    ]
+}
+
+ReadOnlyTheseLang       = ['en', 'ja', 'zh-CN', 'zh-TW']
 
 # Select the translate engine ('deepl' or 'google')
 Translator              = 'deepl' #'google'
-
-# Use Google Apps Script for tlanslating
-# e.g.) GAS_URL         = 'https://script.google.com/macros/s/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/exec'
 GAS_URL                 = ''
-
-# Enter the suffix of the Google Translate URL you normally use.
-# Example: translate.google.co.jp -> 'co.jp'
-#          translate.google.com   -> 'com'
 GoogleTranslate_suffix  = 'de'
+GoogleTTS_suffix        = 'de'
 
-# If you meet any bugs, You can check some error message using Debug mode (Debug = True)
-Debug                   = True
+Debug                   = False
 
+Quotes = [
+    "“Oh mein Gott! It's Limit Cut!!” — RPGReki, October 2023",
+    "“I'm a rather wet bunny… or should I say moist?” — RPGReki, September 2023",
+]

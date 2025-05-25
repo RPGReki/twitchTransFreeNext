@@ -5,7 +5,8 @@ from async_google_trans_new import AsyncTranslator, constant
 from http.client import HTTPSConnection as hc
 from twitchio.ext import commands
 from emoji import distinct_emoji_list
-import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re
+import json, os, shutil, re, asyncio, deepl, sys, signal, tts, sound, re, uwuify, random, queue
+from pyroll20.pyroll20 import roll
 import database_controller as db # ja:既訳語データベース   en:Translation Database
 
 version = '2.5.1'
@@ -48,7 +49,7 @@ TMP_DIR = f'{os.path.dirname(sys.argv[0])}/tmp/'
 # translate.googleのサフィックスリスト
 URL_SUFFIX_LIST = [re.search('translate.google.(.*)', url.strip()).group(1) for url in constant.DEFAULT_SERVICE_URLS]
 
-TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca", "ceb", "ny", "zh-CN", "zh-TW", "co",
+TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca", "ceb", "ny", "zh-CN", "zh-TW", "zh-HK", "co",
                 "hr", "cs", "da", "nl", "en", "eo", "et", "tl", "fi", "fr", "fy", "gl", "ka", "de", "el", "gu", "ht", "ha",
                 "haw", "iw", "hi", "hmn", "hu", "is", "ig", "id", "ga", "it", "ja", "jw", "kn", "kk", "km", "ko", "ku", "ky",
                 "lo", "la", "lv", "lt", "lb", "mk", "mg", "ms", "ml", "mt", "mi", "mr", "mn", "my", "ne", "no", "ps", "fa",
@@ -56,6 +57,8 @@ TargetLangs = ["af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg",
                 "sv", "tg", "ta", "te", "th", "tr", "uk", "ur", "uz", "vi", "cy", "xh", "yi", "yo", "zu"]
 
 deepl_lang_dict = {'de':'DE', 'en':'EN', 'fr':'FR', 'es':'ES', 'pt':'PT', 'it':'IT', 'nl':'NL', 'pl':'PL', 'ru':'RU', 'ja':'JA', 'zh-CN':'ZH'}
+
+ptts_text = ""
 
 ##########################################
 # load config text #######################
@@ -147,12 +150,24 @@ async def non_twitch_emotes(channel:str):
     for path in [f"/v1/channel/{channel}/emotes/bttv.7tv.ffz","/v1/global/emotes/bttv.7tv.ffz"]:
         conn.request("GET", path) # Get non-Twitch emotes
         resp = conn.getresponse() # Get API response
-        for i in json.loads(resp.read()):
-            if re.match(r"[0-9][psmz]", i['code']):
-                continue
-            if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo)", i['code']):
-                continue
-            emotes_list.append(i['code'])
+        try:
+            for i in json.loads(resp.read()):
+                if re.match(r"[0-9][psmz]", i['code']):
+                    continue
+                if re.match(r"(chi|pon|kan|kita|riichi|ron|tsumo|toitoi|mleague)", i['code']):
+                    continue
+                if re.match(r"(hi|eyes|lychee|sleep|sleepy|MSQ|mentor|PonCat|Yo|doomed|confused|food|lurk)", i['code']):
+                    continue
+                if re.match(r"(raised|blind|Bio|Protect|Stoneskin|ShroudOfSaints|Bane|LuminiferousAether|FeyWind|FeyCaress|Contagion|Kardia|ClericStance)", i['code']):
+                    continue
+                if re.match(r"(astrologian|dancer|ninja|paladin|samurai|summoner|warrior|whitemage|blackmage|darkknight|gunbreaker|machinist|reaper|bluemage|dragoon|redmage|scholar|sage)", i['code']):
+                    continue
+                if re.match(r"(GLA|PLD|MRD|WAR|DRK|GNB|CNJ|WHM|SCH|AST|SAG|PGL|MNK|SAM|LNC|DRG|REA|ROG|NIN|ARC|BRD|MCH|DNC|THM|BLM|ACN|SMN|RDM|BLU|CRP|BSM|ARM|GSM|LTW|WVR|ALC|CUL|MIN|BTN|FSH)", i['code']):
+                    continue
+                
+                emotes_list.append(i['code'])
+        except Exception:
+            pass
     return emotes_list
 
 ##########################################
@@ -160,20 +175,23 @@ async def non_twitch_emotes(channel:str):
 ##########################################
 
 class Bot(commands.Bot):
+    pi_tts_text = ""
+    po_tts_text = ""
+    p_out_text = ""
 
     def __init__(self):
         super().__init__(
             token               = config.Trans_OAUTH,
-            prefix              = "!",
-            initial_channels    = [config.Twitch_Channel]
+            prefix              = config.Bot_Prefix,
+            initial_channels    = config.Bot_Channels
         )
 
     # 起動時 ####################
     async def event_channel_joined(self, channel):
         'Called once when the bot goes online.'
-        print(f"{self.nick} is online!")
-        await channel.send(f"/color {config.Trans_TextColor}")
-        await channel.send(f"/me hopped into chat!")
+        print(f"{self.nick} joined {channel.name}!")
+        self.output = self.get_channel(config.Trans_Username)
+        #await channel.send(f"Translating messages from this channel to https://twitch.tv/{config.Trans_Username}/chat …")
 
     # メッセージを受信したら ####################
     async def event_message(self, msg):
@@ -188,13 +206,16 @@ class Bot(commands.Bot):
         if not msg.echo:
             await self.handle_commands(msg)
 
-        if msg.content.startswith('!'):
+        if msg.content.startswith('!') or msg.content.startswith(config.Bot_Prefix):
+            return
+        
+        if msg.channel.name == config.Trans_Target_Channel:
             return
 
         # 変数入れ替え ------------------------
         message = msg.content
         user    = msg.author.name.lower()
-        non_twitch_emote_list = await non_twitch_emotes(config.Twitch_Channel)
+        non_twitch_emote_list = await non_twitch_emotes(config.Twitch_Channel) or await non_twitch_emotes(config.Twitch_Channel) or []
 
         # 無視ユーザリストチェック -------------
         if config.Debug: print('USER:{}'.format(user))
@@ -277,7 +298,11 @@ class Bot(commands.Bot):
 
         # 入力 --------------------------
         in_text = message
-        print(in_text)
+        print(f"{user}: {in_text}")
+        if config.Trans_Target_Channel != config.Twitch_Channel:
+            if not self.output:
+                self.output = self.get_channel(config.Trans_Target_Channel)
+            await self.output.send('{}: {}'.format(user, in_text))
 
         # 言語検出 -----------------------
         if config.Debug: print(f'--- Detect Language ---')
@@ -305,7 +330,7 @@ class Bot(commands.Bot):
         if config.Debug: print(f'lang_detect:{lang_detect}')
 
         # 翻訳先言語の選択 ---------------
-        if config.Debug: print(f'--- Select Destinate Language ---')
+        if config.Debug: print(f'--- Select Destination Language ---')
         lang_dest = config.lang_TransToHome if lang_detect != config.lang_TransToHome else config.lang_HomeToOther
         if config.Debug: print(f"lang_detect:{lang_detect} lang_dest:{lang_dest}")
 
@@ -329,28 +354,20 @@ class Bot(commands.Bot):
         if config.TTS_In:
             tts_text = in_text
             if lang_detect == "en" or lang_detect == "un":
-                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 dots', tts_text)
-                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 bamboo', tts_text)
-                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 characters', tts_text)
-                tts_text = re.sub(r'\b1[zZ]\b', 'east', tts_text)
-                tts_text = re.sub(r'\b2[zZ]\b', 'south', tts_text)
-                tts_text = re.sub(r'\b3[zZ]\b', 'west', tts_text)
-                tts_text = re.sub(r'\b4[zZ]\b', 'north', tts_text)
-                tts_text = re.sub(r'\b5[zZ]\b', 'white', tts_text)
-                tts_text = re.sub(r'\b6[zZ]\b', 'green', tts_text)
-                tts_text = re.sub(r'\b7[zZ]\b', 'red', tts_text)
-            if lang_detect == "de":
-                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 Kreise', tts_text)
-                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 Bambus', tts_text)
-                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 Schriftzeichen', tts_text)
-                tts_text = re.sub(r'\b1[zZ]\b', 'Ost', tts_text)
-                tts_text = re.sub(r'\b2[zZ]\b', 'Süd', tts_text)
-                tts_text = re.sub(r'\b3[zZ]\b', 'West', tts_text)
-                tts_text = re.sub(r'\b4[zZ]\b', 'Nord', tts_text)
-                tts_text = re.sub(r'\b5[zZ]\b', 'Weiß', tts_text)
-                tts_text = re.sub(r'\b6[zZ]\b', 'Grün', tts_text)
-                tts_text = re.sub(r'\b7[zZ]\b', 'Rot', tts_text)
-            tts.put(tts_text, lang_detect)
+                for pair in config.TTS_Substitutions['en']:
+                    if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                    tts_text = re.sub(pair[0], pair[1], tts_text)
+            else:
+                if lang_detect in config.TTS_Substitutions: 
+                    for pair in config.TTS_Substitutions[lang_detect]:
+                        if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                        tts_text = re.sub(pair[0], pair[1], tts_text)
+            if self.pi_tts_text != tts_text:
+                print(f"TTS({lang_detect}): {tts_text}")
+                tts.put(tts_text, lang_detect)
+            else:
+                print("Duplicate TTS detected. Ignoring…")
+            self.pi_tts_text = tts_text
 
         # 検出言語と翻訳先言語が同じだったら無視！
         if lang_detect == lang_dest:
@@ -361,7 +378,8 @@ class Bot(commands.Bot):
         if config.Debug: print(f'--- Translation ---')
         translatedText = ''
 
-        # en:Use database to reduce deepl limit     ja:データベースの活用でDeepLの字数制限を軽減
+        # en:Use database to reduce deepl limit     
+        # ja:データベースの活用でDeepLの字数制限を軽減
         translation_from_database = await db.get(in_text,lang_dest) if in_text is not None else None
 
         if translation_from_database is not None:
@@ -374,14 +392,14 @@ class Bot(commands.Bot):
                 try:
                     if lang_detect in deepl_lang_dict.keys() and lang_dest in deepl_lang_dict.keys():
                         translatedText = (
-                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language= deepl_lang_dict[lang_detect], target_language=deepl_lang_dict[lang_dest], text=in_text))
+                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language=deepl_lang_dict[lang_detect], target_language=deepl_lang_dict[lang_dest], text=in_text))
                             )[0]
                         if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[lang_detect]} > {deepl_lang_dict[lang_dest]})')
-                    elif lang_detect == "un" and lang_dest in deepl_lang_dict.keys():
+                    elif lang_detect == "un" and config.lang_Fallback in deepl_lang_dict.keys() and lang_dest in deepl_lang_dict.keys():
                         translatedText = (
-                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language= deepl_lang_dict["en"], target_language=deepl_lang_dict[lang_dest], text=in_text))
+                            await asyncio.gather(asyncio.to_thread(deepl.translate, source_language=deepl_lang_dict[config.lang_Fallback], target_language=deepl_lang_dict[lang_dest], text=in_text))
                             )[0]
-                        if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[en]} > {deepl_lang_dict[lang_dest]})')
+                        if config.Debug: print(f'[DeepL Tlanslate]({deepl_lang_dict[config.lang_Fallback]} > {deepl_lang_dict[lang_dest]})')
                     else:
                         if not config.GAS_URL:
                             try:
@@ -429,96 +447,64 @@ class Bot(commands.Bot):
                     if config.Debug: print(e)
 
             # en:Save the translation to database   ja:翻訳をデータベースに保存する
-            await db.save(in_text,translatedText,lang_dest)
+            if translatedText != in_text: await db.save(in_text, translatedText, lang_dest)
 
         # チャットへの投稿 ----------------
         # 投稿内容整形 & 投稿
         out_text = translatedText
-        if out_text.strip != "":
-            if config.Show_ByName:
-                out_text = '{} [by {}]'.format(out_text, user)
-            if config.Show_ByLang:
-                out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
-
-        # コンソールへの表示 --------------
-        print(out_text)
-
-        # en:If message is only emoji; then do not translate, and do not send a message
-        # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
-        if in_text is not None:
-            await msg.channel.send("/me " + out_text)
-
-        # 音声合成（出力文） --------------
-        # if len(translatedText) > int(config.TooLong_Cut):
-        #     translatedText = translatedText[0:int(config.TooLong_Cut)]
-        if config.TTS_Out:
-            tts_text = translatedText
-            if lang_detect == "en":
-                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 dots', tts_text)
-                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 bamboo', tts_text)
-                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 characters', tts_text)
-                tts_text = re.sub(r'\b1[zZ]\b', 'east', tts_text)
-                tts_text = re.sub(r'\b2[zZ]\b', 'south', tts_text)
-                tts_text = re.sub(r'\b3[zZ]\b', 'west', tts_text)
-                tts_text = re.sub(r'\b4[zZ]\b', 'north', tts_text)
-                tts_text = re.sub(r'\b5[zZ]\b', 'white', tts_text)
-                tts_text = re.sub(r'\b6[zZ]\b', 'green', tts_text)
-                tts_text = re.sub(r'\b7[zZ]\b', 'red', tts_text)
-            if lang_detect == "de":
-                tts_text = re.sub(r'\b([0-9])[pP]\b', '\\1 Kreise', tts_text)
-                tts_text = re.sub(r'\b([0-9])[sS]\b', '\\1 Bambus', tts_text)
-                tts_text = re.sub(r'\b([0-9])[mM]\b', '\\1 Schriftzeichen', tts_text)
-                tts_text = re.sub(r'\b1[zZ]\b', 'Ost', tts_text)
-                tts_text = re.sub(r'\b2[zZ]\b', 'Süd', tts_text)
-                tts_text = re.sub(r'\b3[zZ]\b', 'West', tts_text)
-                tts_text = re.sub(r'\b4[zZ]\b', 'Nord', tts_text)
-                tts_text = re.sub(r'\b5[zZ]\b', 'Weiß', tts_text)
-                tts_text = re.sub(r'\b6[zZ]\b', 'Grün', tts_text)
-                tts_text = re.sub(r'\b7[zZ]\b', 'Rot', tts_text)
-            tts.put(tts_text, lang_dest)
-
-
-    ##############################
-    # コマンド ####################
-    @commands.command(name='ver')
-    async def ver(self, ctx):
-        await ctx.send('this is tTFN. ver: ' + version)
-
-    @commands.command(name='sound')
-    async def sound(self, ctx):
-        sound_name = ctx.message.content.strip().split(" ")[1]
-        sound.put(sound_name)
-
-    @commands.command(name='timer')
-    async def timer(self, ctx):
-        timer_min = 0
-        timer_name = ''
-
-        d = ctx.message.content.strip().split(" ")
-        if len(d) == 2:
-            try:
-                timer_min = int(d[1])
-            except Exception as e:
-                    print('timer error: !timer [min] [name]')
-                    if config.Debug: print(e.args)
-                    return 0
-
-        elif len(d) == 3:
-            try:
-                timer_min = int(d[1])
-                timer_name = d[2]
-            except Exception as e:
-                    print('timer error: !timer [min] [name]')
-                    if config.Debug: print(e.args)
-                    return 0
-
+        if out_text.casefold().strip() == in_text.casefold().strip() or out_text.casefold().strip() == self.p_out_text.casefold().strip():
+            if config.Debug: print(out_text)
+            out_text = ""
+            print("Input text equals output text, skipping line.")
+        
         else:
-            print(f'command error [{ctx.content}]')
-            return 0
+            if out_text.strip():
+                if config.Show_ByLang:
+                    out_text = '{} ({} > {})'.format(out_text, lang_detect, lang_dest)
+                if config.Show_ByName:
+                    out_text = '{}: {}'.format(user, out_text)
 
-        await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) start! ####')
-        await asyncio.sleep(timer_min*60)
-        await ctx.send(f'#### timer [{timer_name}] ({timer_min} min.) end! ####')
+            # コンソールへの表示 --------------
+            print(out_text)
+
+            # en:If message is only emoji; then do not translate, and do not send a message
+            # ja:メッセージが絵文字だけの場合は、翻訳せず、メッセージを送らないでください
+            if in_text is not None:
+                if config.Trans_Target_Channel != config.Twitch_Channel:
+                    if not self.output: self.output = self.get_channel(config.Trans_Target_Channel)
+                    await self.output.send("/me " + out_text)
+                else:
+                    await msg.channel.send("/me " + out_text)
+                self.p_out_text = out_text
+
+            # 音声合成（出力文） --------------
+            # if len(translatedText) > int(config.TooLong_Cut):
+            #     translatedText = translatedText[0:int(config.TooLong_Cut)]
+            if out_text.casefold().strip() == in_text.casefold().strip():
+                tts_text = in_text
+                for pair in config.TTS_Substitutions[config.lang_Fallback]:
+                    if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                    tts_text = re.sub(pair[0], pair[1], tts_text)
+                
+                print(f"TTS ({config.lang_Fallback}): {tts_text}")
+                tts.put(tts_text, config.lang_Fallback)
+            
+            if config.TTS_Out and lang_dest in config.ReadOnlyTheseLang and out_text:
+                tts_text = translatedText
+                
+                if lang_dest in config.TTS_Substitutions:
+                    for pair in config.TTS_Substitutions[lang_dest]:
+                        if config.Debug: print("Replacing \"" + pair[0] + "\" with \"" + pair[1] +"\"")
+                        tts_text = re.sub(pair[0], pair[1], tts_text)
+
+                if self.po_tts_text != tts_text:
+                    print(f"TTS({lang_dest}): {tts_text}")
+                    tts.put(tts_text, lang_dest)
+                else:
+                    print("Duplicate TTS detected. Ignoring…")
+                
+                self.po_tts_text = tts_text
+
 
 # メイン処理 ###########################
 def main():
@@ -535,7 +521,7 @@ def main():
             print(f'Translate using Google Apps Script')
             if config.Debug: print(f'GAS URL: {config.GAS_URL}')
 
-        # 作業用ディレクトリ削除 ＆ 作成 ----
+
         if config.Debug: print("making tmp dir...")
         if os.path.exists(TMP_DIR):
             shutil.rmtree(TMP_DIR)
